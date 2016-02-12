@@ -10,7 +10,7 @@ namespace Probation
     public enum CardColors
     {
         Red,
-        Greeen,
+        Green,
         Blue,
         Yellow,
         White
@@ -19,18 +19,14 @@ namespace Probation
     public class Card
     {
 
-        public int? Rank { get; private set; }
-        public CardColors? Color { get; private set; }
+        public int Rank { get; private set; }
+        public CardColors Color { get; private set; }
         
-        public Card(int? rank, CardColors? color)
+        public Card(int rank, CardColors color)
         {
             Rank = rank;
             Color = color;
         }
-
-
-
-        public Card() : this(null, null){}
 
         public override bool Equals(object obj)
         {
@@ -49,24 +45,46 @@ namespace Probation
     public class CardInfo
     {
         public Card RealCard { get; private set; }
-
-        public Card KnownCard { get; private set; }
+        public bool KnewRank { get; private set; }
+        public bool KnewColor { get; private set; }
+        public HashSet<int> NotRank { get; private set; } 
+        public HashSet<CardColors> NotColor { get; private set; }
 
         public CardInfo(Card realCard)
         {
             RealCard = realCard;
-            KnownCard = new Card();
+            KnewRank = false;
+            KnewColor = false;
+            NotRank = new HashSet<int>();
+            NotColor = new HashSet<CardColors>();
         }
 
-        public bool TryAddInfoAboutCard(int? rank, CardColors? color)
+        public bool TryAddInfoAboutCard(int? rank, CardColors? color, int? notRank, CardColors? notColor)
         {
-            if (rank != null && KnownCard.Rank != null)
-                return false;
-            int? newRank = rank ?? KnownCard.Rank;
-            if (color != null && KnownCard.Color != null)
-                return false;
-            CardColors? newColor = color ?? KnownCard.Color;
-            KnownCard = new Card(newRank, newColor);
+            if (rank.HasValue)
+                if (rank.Value != RealCard.Rank)
+                    return false;
+                else
+                    KnewRank = true;
+            if (color.HasValue)
+                if (color.Value != RealCard.Color)
+                    return false;
+                else
+                    KnewColor = true;
+            if (notRank.HasValue)
+                if (RealCard.Rank == notRank.Value)
+                    return false;
+                else
+                    NotRank.Add(notRank.Value);
+            if (notColor.HasValue)
+                if (RealCard.Color == notColor.Value)
+                    return false;
+                else
+                    NotColor.Add(notColor.Value);
+            if (NotRank.Count == 4)
+                KnewRank = true;
+            if (NotColor.Count == 4)
+                KnewColor = true;
             return true;
         }
     }
@@ -93,17 +111,18 @@ namespace Probation
         private readonly Regex PlayCardRegex = new Regex(@"Play card (\d)");
         private readonly Regex DropCardRegex = new Regex(@"Drop card (\d)");
         private readonly Dictionary<Regex, Action<Match>> InputDataProсessing;
+
         private const int playersCount = 2;
-        private readonly Dictionary<char, CardColors?> ColorAbbreviation = new Dictionary<char, CardColors?>()
+        private readonly Dictionary<char, CardColors> ColorAbbreviation = new Dictionary<char, CardColors>()
         {
             {'R', CardColors.Red},
-            {'G', CardColors.Greeen},
+            {'G', CardColors.Green},
             {'B', CardColors.Blue},
             {'Y', CardColors.Yellow},
             {'W', CardColors.White}
         };
 
-        private Dictionary<CardColors?, int> cardsOnTable;
+        private Dictionary<CardColors, int> cardsOnTable;
         private Queue<Card> deck; 
         private int currentPlayer;
         private List<CardInfo>[] playersHands;
@@ -134,12 +153,13 @@ namespace Probation
                             continue;
                         turnsCount++;
                         InputDataProсessing[regex](regex.Match(inputLine));
-                    }
-                    if (gameIsOver)
-                    {
-                        yield return new GameResults(turnsCount, playedCards, riskedTurns);
+                        if (gameIsOver)
+                        {
+                            yield return new GameResults(turnsCount, playedCards, riskedTurns);
+                        }
                     }
                 }
+                currentPlayer = (currentPlayer + 1)%playersCount;
             }
         }
 
@@ -159,17 +179,18 @@ namespace Probation
 
         private Card SelectAbbreviationToCard(string abbreviation)
         {
-            return new Card(int.Parse(abbreviation[0].ToString()), ColorAbbreviation[abbreviation[1]]);
+            return new Card(int.Parse(abbreviation[1].ToString()), ColorAbbreviation[abbreviation[0]]);
         }
 
         private void InitGameState()
         {
-            currentPlayer = 0;
+            gameIsOver = false;
+            currentPlayer = -1;
             playersHands = new List<CardInfo>[playersCount];
-            cardsOnTable = new Dictionary<CardColors?, int>()
+            cardsOnTable = new Dictionary<CardColors, int>()
             {
                 {CardColors.Blue, 0},
-                {CardColors.Greeen, 0},
+                {CardColors.Green, 0},
                 {CardColors.Red, 0},
                 {CardColors.White, 0},
                 {CardColors.Yellow, 0}
@@ -181,7 +202,7 @@ namespace Probation
 
         private int GetNextPlayer()
         {
-            return (playersCount + 1)%playersCount;
+            return (currentPlayer + 1)%playersCount;
         }
 
         private void TellColor(string colorString, List<int> selectedCardsIndexes)
@@ -189,38 +210,79 @@ namespace Probation
             CardColors color;
             if(!CardColors.TryParse(colorString, true, out color))
                 throw new Exception("incorrect input format");
-            foreach (var selectedCardsIndex in selectedCardsIndexes)
+            var nextPlayersHand = playersHands[GetNextPlayer()];
+            for (int i =0; i < nextPlayersHand.Count; i++)
             {
-                var nextPlayersHand = playersHands[GetNextPlayer()];
-                if (!nextPlayersHand[selectedCardsIndex].TryAddInfoAboutCard(null, color))
-                    gameIsOver = true;
+                if (selectedCardsIndexes.Contains(i))
+                {
+                    if (!nextPlayersHand[i].TryAddInfoAboutCard(null, color, null, null))
+                        gameIsOver = true;
+                }
+                else
+                {
+                    if (!nextPlayersHand[i].TryAddInfoAboutCard(null, null, null, color))
+                        gameIsOver = true;
+                }
             }
         }
 
         private void TellRank(int rank, List<int> selectedCardsIndexes)
         {
-            foreach (var selectedCardsIndex in selectedCardsIndexes)
+            var nextPlayersHand = playersHands[GetNextPlayer()];
+            for (int i = 0; i < nextPlayersHand.Count; i++)
             {
-                var nextPlayerHand = playersHands[GetNextPlayer()];
-                if (!nextPlayerHand[selectedCardsIndex].TryAddInfoAboutCard(rank, null))
-                    gameIsOver = true;
+                if (selectedCardsIndexes.Contains(i))
+                {
+                    if (!nextPlayersHand[i].TryAddInfoAboutCard(rank, null, null, null))
+                        gameIsOver = true;
+                }
+                else
+                {
+                    if (!nextPlayersHand[i].TryAddInfoAboutCard(null, null, rank, null))
+                        gameIsOver = true;
+                }
             }
         }
 
         private void PlayCard(int cardsIndex)
         {
-            var card = playersHands[currentPlayer][cardsIndex];
+            CardInfo card = playersHands[currentPlayer][cardsIndex];
             if (cardsOnTable[card.RealCard.Color] + 1 != card.RealCard.Rank)
             {
                 gameIsOver = true;
                 return;
             }
+            if (CheckForRisked(card))
+            {
+                riskedTurns++;
+                Console.WriteLine("Risked!!!");
+            }
             cardsOnTable[card.RealCard.Color]++;
             DropCard(cardsIndex);
-            if (card.KnownCard.Color == null || card.KnownCard.Rank == null)
-                riskedTurns++;
             if (card.RealCard.Rank == 5)
                 CheckForAllCardsOnTable();
+            playedCards++;
+        }
+
+        private bool CheckForRisked(CardInfo card)
+        {
+            if (card.KnewRank && card.RealCard.Rank == 1)
+            {
+                if (card.KnewColor || playedCards == 0)
+                    return false;
+            }
+            if (card.KnewColor && card.KnewRank)
+                return false;
+            if (card.KnewRank)
+            {
+                foreach (var cardOnTable in cardsOnTable)
+                {
+                    if ((cardOnTable.Value == card.RealCard.Rank && !card.NotColor.Contains(cardOnTable.Key)))
+                        return true;
+                }
+                return false;
+            }
+            return true;
         }
 
         private void CheckForAllCardsOnTable()

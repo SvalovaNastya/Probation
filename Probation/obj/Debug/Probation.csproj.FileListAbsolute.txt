@@ -1,0 +1,12 @@
+C:\Users\Lenovo\Documents\Visual Studio 2012\Projects\Probation\Probation\bin\Debug\Probation.exe.config
+C:\Users\Lenovo\Documents\Visual Studio 2012\Projects\Probation\Probation\bin\Debug\Probation.exe
+C:\Users\Lenovo\Documents\Visual Studio 2012\Projects\Probation\Probation\bin\Debug\Probation.pdb
+C:\Users\Lenovo\Documents\Visual Studio 2012\Projects\Probation\Probation\obj\Debug\Probation.csprojResolveAssemblyReference.cache
+C:\Users\Lenovo\Documents\Visual Studio 2012\Projects\Probation\Probation\obj\Debug\Probation.exe
+C:\Users\Lenovo\Documents\Visual Studio 2012\Projects\Probation\Probation\obj\Debug\Probation.pdb
+C:\Users\Настя домашняя\Desktop\Probation\Probation\bin\Debug\Probation.exe.config
+C:\Users\Настя домашняя\Desktop\Probation\Probation\obj\Debug\Probation.exe
+C:\Users\Настя домашняя\Desktop\Probation\Probation\obj\Debug\Probation.pdb
+C:\Users\Настя домашняя\Desktop\Probation\Probation\obj\Debug\Probation.csprojResolveAssemblyReference.cache
+C:\Users\Настя домашняя\Desktop\Probation\Probation\bin\Debug\Probation.exe
+C:\Users\Настя домашняя\Desktop\Probation\Probation\bin\Debug\Probation.pdb

@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace Probation
 {
@@ -18,7 +16,6 @@ namespace Probation
 
     public class Card
     {
-
         public int Rank { get; private set; }
         public CardColors Color { get; private set; }
         
@@ -33,12 +30,12 @@ namespace Probation
             if (!(obj is Card))
                 throw new InvalidCastException();
             Card other = (Card) obj;
-            return this.Color == other.Color && this.Rank == other.Rank;
+            return Color == other.Color && Rank == other.Rank;
         }
 
         public override int GetHashCode()
         {
-            return (int)Color.GetHashCode() ^ Rank.GetHashCode();
+            return Color.GetHashCode() ^ Rank.GetHashCode();
         }
     }
 
@@ -91,15 +88,15 @@ namespace Probation
 
     public struct GameResults
     {
-        public int turnsCount;
-        public int playedCardsCount;
-        public int riskedTurnsCount;
+        public int TurnsCount;
+        public int PlayedCardsCount;
+        public int RiskedTurnsCount;
 
         public GameResults(int turnsCount, int playedCardsCount, int riskedTurnsCount)
         {
-            this.turnsCount = turnsCount;
-            this.playedCardsCount = playedCardsCount;
-            this.riskedTurnsCount = riskedTurnsCount;
+            TurnsCount = turnsCount;
+            PlayedCardsCount = playedCardsCount;
+            RiskedTurnsCount = riskedTurnsCount;
         }
     }
 
@@ -208,7 +205,7 @@ namespace Probation
         private void TellColor(string colorString, List<int> selectedCardsIndexes)
         {
             CardColors color;
-            if(!CardColors.TryParse(colorString, true, out color))
+            if(!Enum.TryParse(colorString, true, out color))
                 throw new Exception("incorrect input format");
             var nextPlayersHand = playersHands[GetNextPlayer()];
             for (int i =0; i < nextPlayersHand.Count; i++)
@@ -255,7 +252,6 @@ namespace Probation
             if (CheckForRisked(card))
             {
                 riskedTurns++;
-                Console.WriteLine("Risked!!!");
             }
             cardsOnTable[card.RealCard.Color]++;
             DropCard(cardsIndex);
@@ -275,12 +271,7 @@ namespace Probation
                 return false;
             if (card.KnewRank)
             {
-                foreach (var cardOnTable in cardsOnTable)
-                {
-                    if ((cardOnTable.Value == card.RealCard.Rank && !card.NotColor.Contains(cardOnTable.Key)))
-                        return true;
-                }
-                return false;
+                return ColorAbbreviation.Values.Any(cardColor => !card.NotColor.Contains(cardColor) && cardsOnTable[cardColor] != card.RealCard.Rank - 1);
             }
             return true;
         }
@@ -306,7 +297,7 @@ namespace Probation
         }
     }
 
-    public class Svalova_Nastya
+    public class Program
     {
         public static IEnumerable<string> ReadAllLines()
         {
@@ -323,7 +314,7 @@ namespace Probation
             var arbiter = new GameArbiter();
             foreach (var gameResult in arbiter.RunGames(ReadAllLines()))
             {
-                Console.WriteLine("Turn: {0}, cards: {1}, with risk: {2}", gameResult.turnsCount, gameResult.playedCardsCount, gameResult.riskedTurnsCount);
+                Console.WriteLine("Turn: {0}, cards: {1}, with risk: {2}", gameResult.TurnsCount, gameResult.PlayedCardsCount, gameResult.RiskedTurnsCount);
             }
         }
     }

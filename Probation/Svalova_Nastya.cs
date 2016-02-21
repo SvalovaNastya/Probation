@@ -16,8 +16,16 @@ namespace Probation
 
     public class Card
     {
-        public int Rank { get; private set; }
-        public CardColors Color { get; private set; }
+        public readonly int Rank;
+        public readonly CardColors Color;
+        private static readonly Dictionary<char, CardColors> ColorAbbreviation = new Dictionary<char, CardColors>()
+        {
+            {'R', CardColors.Red},
+            {'G', CardColors.Green},
+            {'B', CardColors.Blue},
+            {'Y', CardColors.Yellow},
+            {'W', CardColors.White}
+        };
         
         public Card(int rank, CardColors color)
         {
@@ -25,35 +33,27 @@ namespace Probation
             Color = color;
         }
 
-        public override bool Equals(object obj)
+        public static Card SelectAbbreviationToCard(string abbreviation)
         {
-            if (!(obj is Card))
-                throw new InvalidCastException();
-            Card other = (Card) obj;
-            return Color == other.Color && Rank == other.Rank;
-        }
-
-        public override int GetHashCode()
-        {
-            return Color.GetHashCode() ^ Rank.GetHashCode();
+            return new Card(int.Parse(abbreviation[1].ToString()), ColorAbbreviation[abbreviation[0]]);
         }
     }
 
     public class CardInfo
     {
-        public Card RealCard { get; private set; }
+        public readonly Card RealCard;
         public bool KnewRank { get; private set; }
         public bool KnewColor { get; private set; }
-        public HashSet<int> NotRank { get; private set; } 
-        public HashSet<CardColors> NotColor { get; private set; }
+        public HashSet<int> NotThisRank { get; private set; } 
+        public HashSet<CardColors> NotThisColor { get; private set; }
 
         public CardInfo(Card realCard)
         {
             RealCard = realCard;
             KnewRank = false;
             KnewColor = false;
-            NotRank = new HashSet<int>();
-            NotColor = new HashSet<CardColors>();
+            NotThisRank = new HashSet<int>();
+            NotThisColor = new HashSet<CardColors>();
         }
 
         public bool TryAddInfoAboutCard(int? rank, CardColors? color, int? notRank, CardColors? notColor)
@@ -72,15 +72,15 @@ namespace Probation
                 if (RealCard.Rank == notRank.Value)
                     return false;
                 else
-                    NotRank.Add(notRank.Value);
+                    NotThisRank.Add(notRank.Value);
             if (notColor.HasValue)
                 if (RealCard.Color == notColor.Value)
                     return false;
                 else
-                    NotColor.Add(notColor.Value);
-            if (NotRank.Count == 4)
+                    NotThisColor.Add(notColor.Value);
+            if (NotThisRank.Count == 4)
                 KnewRank = true;
-            if (NotColor.Count == 4)
+            if (NotThisColor.Count == 4)
                 KnewColor = true;
             return true;
         }
@@ -88,9 +88,9 @@ namespace Probation
 
     public struct GameResults
     {
-        public int TurnsCount;
-        public int PlayedCardsCount;
-        public int RiskedTurnsCount;
+        public readonly int TurnsCount;
+        public readonly int PlayedCardsCount;
+        public readonly int RiskedTurnsCount;
 
         public GameResults(int turnsCount, int playedCardsCount, int riskedTurnsCount)
         {
@@ -102,22 +102,7 @@ namespace Probation
 
     public class GameArbiter
     {
-        private readonly Regex StartNewGameRegex = new Regex(@"Start new game with deck (.*)");
-        private readonly Regex TellColorRegex = new Regex(@"Tell color (\w*) for cards (.*)");
-        private readonly Regex TellRankRegex = new Regex(@"Tell rank (\d) for cards (.*)");
-        private readonly Regex PlayCardRegex = new Regex(@"Play card (\d)");
-        private readonly Regex DropCardRegex = new Regex(@"Drop card (\d)");
-        private readonly Dictionary<Regex, Action<Match>> InputDataProсessing;
-
         private const int playersCount = 2;
-        private readonly Dictionary<char, CardColors> ColorAbbreviation = new Dictionary<char, CardColors>()
-        {
-            {'R', CardColors.Red},
-            {'G', CardColors.Green},
-            {'B', CardColors.Blue},
-            {'Y', CardColors.Yellow},
-            {'W', CardColors.White}
-        };
 
         private Dictionary<CardColors, int> cardsOnTable;
         private Queue<Card> deck; 
@@ -128,39 +113,20 @@ namespace Probation
         private bool gameIsOver;
         private int playedCards;
 
-        public GameArbiter()
+        public IEnumerable<GameResults> RunGames(IEnumerable<Action> actions)
         {
-            InputDataProсessing = new Dictionary<Regex, Action<Match>>();
-            InputDataProсessing[StartNewGameRegex] = match => StartNewGame(match.Groups[1].Value.Split(' ').ToList());
-            InputDataProсessing[TellColorRegex] = match => TellColor(match.Groups[1].Value, match.Groups[2].Value.Split(' ').Select(int.Parse).ToList());
-            InputDataProсessing[TellRankRegex] = match => TellRank(int.Parse(match.Groups[1].Value), match.Groups[2].Value.Split(' ').Select(int.Parse).ToList());
-            InputDataProсessing[PlayCardRegex] = match => PlayCard(int.Parse(match.Groups[1].Value));
-            InputDataProсessing[DropCardRegex] = match => DropCard(int.Parse(match.Groups[1].Value));
-        }
-
-        public IEnumerable<GameResults> RunGames(IEnumerable<string> inputLines)
-        {
-            foreach (var inputLine in inputLines)
+            foreach (var action in actions)
             {
-                foreach (var regex in InputDataProсessing.Keys)
-                {
-                    if (regex.IsMatch(inputLine))
-                    {
-                        if (gameIsOver && regex != StartNewGameRegex)
-                            continue;
-                        turnsCount++;
-                        InputDataProсessing[regex](regex.Match(inputLine));
-                        if (gameIsOver)
-                        {
-                            yield return new GameResults(turnsCount, playedCards, riskedTurns);
-                        }
-                    }
-                }
-                currentPlayer = (currentPlayer + 1)%playersCount;
+                var gameWasOver = gameIsOver;
+                action();
+                if (gameIsOver && !gameWasOver)
+                    yield return new GameResults(turnsCount, playedCards, riskedTurns);
+                currentPlayer = (currentPlayer + 1) % playersCount;
+                turnsCount++;;
             }
         }
 
-        private void StartNewGame(List<string> initalCards)
+        public void StartNewGame(List<string> initalCards)
         {
             InitGameState();
             for (int i = 0; i < playersCount; i++)
@@ -168,15 +134,10 @@ namespace Probation
                 playersHands[i] = initalCards
                     .Skip(i*5)
                     .Take(5)
-                    .Select(x => new CardInfo(SelectAbbreviationToCard(x)))
+                    .Select(x => new CardInfo(Card.SelectAbbreviationToCard(x)))
                     .ToList();
             }
-            deck = new Queue<Card>(initalCards.Skip(5*playersCount).Select(SelectAbbreviationToCard));
-        }
-
-        private Card SelectAbbreviationToCard(string abbreviation)
-        {
-            return new Card(int.Parse(abbreviation[1].ToString()), ColorAbbreviation[abbreviation[0]]);
+            deck = new Queue<Card>(initalCards.Skip(5*playersCount).Select(Card.SelectAbbreviationToCard));
         }
 
         private void InitGameState()
@@ -202,8 +163,10 @@ namespace Probation
             return (currentPlayer + 1)%playersCount;
         }
 
-        private void TellColor(string colorString, List<int> selectedCardsIndexes)
+        public void TellColor(string colorString, List<int> selectedCardsIndexes)
         {
+            if (gameIsOver)
+                return;
             CardColors color;
             if(!Enum.TryParse(colorString, true, out color))
                 throw new Exception("incorrect input format");
@@ -223,8 +186,10 @@ namespace Probation
             }
         }
 
-        private void TellRank(int rank, List<int> selectedCardsIndexes)
+        public void TellRank(int rank, List<int> selectedCardsIndexes)
         {
+            if (gameIsOver)
+                return;
             var nextPlayersHand = playersHands[GetNextPlayer()];
             for (int i = 0; i < nextPlayersHand.Count; i++)
             {
@@ -241,8 +206,10 @@ namespace Probation
             }
         }
 
-        private void PlayCard(int cardsIndex)
+        public void PlayCard(int cardsIndex)
         {
+            if (gameIsOver)
+                return;
             CardInfo card = playersHands[currentPlayer][cardsIndex];
             if (cardsOnTable[card.RealCard.Color] + 1 != card.RealCard.Rank)
             {
@@ -271,7 +238,7 @@ namespace Probation
                 return false;
             if (card.KnewRank)
             {
-                return ColorAbbreviation.Values.Any(cardColor => !card.NotColor.Contains(cardColor) && cardsOnTable[cardColor] != card.RealCard.Rank - 1);
+                return cardsOnTable.Keys.Where(cardColor => cardsOnTable[cardColor] != card.RealCard.Rank - 1).Any(cardColor => !card.NotThisColor.Contains(cardColor));
             }
             return true;
         }
@@ -288,12 +255,46 @@ namespace Probation
                 gameIsOver = true;
         }
 
-        private void DropCard(int cardsIndex)
+        public void DropCard(int cardsIndex)
         {
+            if (gameIsOver)
+                return;
             playersHands[currentPlayer].RemoveAt(cardsIndex);
             playersHands[currentPlayer].Add(new CardInfo(deck.Dequeue()));
             if (deck.Count == 0)
                 gameIsOver = true;
+        }
+    }
+
+    public class GameCommandsParser
+    {
+        private readonly Regex StartNewGameRegex = new Regex(@"Start new game with deck (.*)");
+        private readonly Regex TellColorRegex = new Regex(@"Tell color (\w*) for cards (.*)");
+        private readonly Regex TellRankRegex = new Regex(@"Tell rank (\d) for cards (.*)");
+        private readonly Regex PlayCardRegex = new Regex(@"Play card (\d)");
+        private readonly Regex DropCardRegex = new Regex(@"Drop card (\d)");
+        private readonly Dictionary<Regex, Action<Match>> InputDataProсessing;
+
+        public GameCommandsParser(GameArbiter arbiter)
+        {
+            InputDataProсessing = new Dictionary<Regex, Action<Match>>();
+            InputDataProсessing[StartNewGameRegex] = match => arbiter.StartNewGame(match.Groups[1].Value.Split(' ').ToList());
+            InputDataProсessing[TellColorRegex] = match => arbiter.TellColor(match.Groups[1].Value, match.Groups[2].Value.Split(' ').Select(int.Parse).ToList());
+            InputDataProсessing[TellRankRegex] = match => arbiter.TellRank(int.Parse(match.Groups[1].Value), match.Groups[2].Value.Split(' ').Select(int.Parse).ToList());
+            InputDataProсessing[PlayCardRegex] = match => arbiter.PlayCard(int.Parse(match.Groups[1].Value));
+            InputDataProсessing[DropCardRegex] = match => arbiter.DropCard(int.Parse(match.Groups[1].Value));
+        }
+
+        public Action ParseCommand(string commandLine)
+        {
+            foreach (var regex in InputDataProсessing.Keys)
+            {
+                if (regex.IsMatch(commandLine))
+                {
+                    return () => InputDataProсessing[regex](regex.Match(commandLine));
+                }
+            }
+            throw new Exception("Error input line");
         }
     }
 
@@ -312,7 +313,8 @@ namespace Probation
         static void Main()
         {
             var arbiter = new GameArbiter();
-            foreach (var gameResult in arbiter.RunGames(ReadAllLines()))
+            var commandsParser = new GameCommandsParser(arbiter);
+            foreach (var gameResult in arbiter.RunGames(ReadAllLines().Select(commandsParser.ParseCommand)))
             {
                 Console.WriteLine("Turn: {0}, cards: {1}, with risk: {2}", gameResult.TurnsCount, gameResult.PlayedCardsCount, gameResult.RiskedTurnsCount);
             }

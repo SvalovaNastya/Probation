@@ -86,13 +86,13 @@ namespace Probation
         }
     }
 
-    public struct GameResults
+    public struct GameResult
     {
         public readonly int TurnsCount;
         public readonly int PlayedCardsCount;
         public readonly int RiskedTurnsCount;
 
-        public GameResults(int turnsCount, int playedCardsCount, int riskedTurnsCount)
+        public GameResult(int turnsCount, int playedCardsCount, int riskedTurnsCount)
         {
             TurnsCount = turnsCount;
             PlayedCardsCount = playedCardsCount;
@@ -100,29 +100,99 @@ namespace Probation
         }
     }
 
-    public class GameArbiter
+    public class PlayerHand
+    {
+        private readonly List<CardInfo> cards;
+
+        public PlayerHand()
+        {
+            cards = new List<CardInfo>();
+        }
+
+        public void AddCard(CardInfo card)
+        {
+            cards.Add(card);
+        }
+
+        public void AddCards(CardInfo[] cards)
+        {
+            foreach (var card in cards)
+            {
+                AddCard(card);
+            }
+        }
+
+        public void DropCard(int cardIndex)
+        {
+            cards.RemoveAt(cardIndex);
+        }
+
+        public CardInfo GetCard(int cardIndex)
+        {
+            var card = cards[cardIndex];
+            return card;
+        }
+
+        public bool TryTellRank(int rank, List<int> selectedCardsIndexes)
+        {
+            for (int i = 0; i < cards.Count; i++)
+            {
+                if (selectedCardsIndexes.Contains(i))
+                {
+                    if (!cards[i].TryAddInfoAboutCard(rank, null, null, null))
+                        return false;
+                }
+                else
+                {
+                    if (!cards[i].TryAddInfoAboutCard(null, null, rank, null))
+                        return false;
+                }
+            }
+            return true;
+        }
+
+        public bool TryTellColor(CardColors color, List<int> selectedCardsIndexes)
+        {
+            for (int i = 0; i < cards.Count; i++)
+            {
+                if (selectedCardsIndexes.Contains(i))
+                {
+                    if (!cards[i].TryAddInfoAboutCard(null, color, null, null))
+                        return false;
+                }
+                else
+                {
+                    if (!cards[i].TryAddInfoAboutCard(null, null, null, color))
+                        return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    public class GameProcessor
     {
         private const int playersCount = 2;
 
         private Dictionary<CardColors, int> cardsOnTable;
         private Queue<Card> deck; 
         private int currentPlayer;
-        private List<CardInfo>[] playersHands;
+        private PlayerHand[] playersHands;
         private int turnsCount;
         private int riskedTurns;
         private bool gameIsOver;
         private int playedCards;
 
-        public IEnumerable<GameResults> RunGames(IEnumerable<Action> actions)
+        public IEnumerable<GameResult> RunGames(IEnumerable<Action> actions)
         {
             foreach (var action in actions)
             {
                 var gameWasOver = gameIsOver;
                 action();
                 if (gameIsOver && !gameWasOver)
-                    yield return new GameResults(turnsCount, playedCards, riskedTurns);
+                    yield return new GameResult(turnsCount, playedCards, riskedTurns);
                 currentPlayer = (currentPlayer + 1) % playersCount;
-                turnsCount++;;
+                turnsCount++;
             }
         }
 
@@ -131,11 +201,11 @@ namespace Probation
             InitGameState();
             for (int i = 0; i < playersCount; i++)
             {
-                playersHands[i] = initalCards
+                playersHands[i].AddCards(initalCards
                     .Skip(i*5)
                     .Take(5)
                     .Select(x => new CardInfo(Card.SelectAbbreviationToCard(x)))
-                    .ToList();
+                    .ToArray());
             }
             deck = new Queue<Card>(initalCards.Skip(5*playersCount).Select(Card.SelectAbbreviationToCard));
         }
@@ -144,7 +214,11 @@ namespace Probation
         {
             gameIsOver = false;
             currentPlayer = -1;
-            playersHands = new List<CardInfo>[playersCount];
+            playersHands = new PlayerHand[playersCount];
+            for (int i = 0; i < playersCount; i++)
+            {
+                playersHands[i] = new PlayerHand();
+            }
             cardsOnTable = new Dictionary<CardColors, int>()
             {
                 {CardColors.Blue, 0},
@@ -171,19 +245,8 @@ namespace Probation
             if(!Enum.TryParse(colorString, true, out color))
                 throw new Exception("incorrect input format");
             var nextPlayersHand = playersHands[GetNextPlayer()];
-            for (int i =0; i < nextPlayersHand.Count; i++)
-            {
-                if (selectedCardsIndexes.Contains(i))
-                {
-                    if (!nextPlayersHand[i].TryAddInfoAboutCard(null, color, null, null))
-                        gameIsOver = true;
-                }
-                else
-                {
-                    if (!nextPlayersHand[i].TryAddInfoAboutCard(null, null, null, color))
-                        gameIsOver = true;
-                }
-            }
+            if (!nextPlayersHand.TryTellColor(color, selectedCardsIndexes))
+                gameIsOver = true;
         }
 
         public void TellRank(int rank, List<int> selectedCardsIndexes)
@@ -191,26 +254,25 @@ namespace Probation
             if (gameIsOver)
                 return;
             var nextPlayersHand = playersHands[GetNextPlayer()];
-            for (int i = 0; i < nextPlayersHand.Count; i++)
-            {
-                if (selectedCardsIndexes.Contains(i))
-                {
-                    if (!nextPlayersHand[i].TryAddInfoAboutCard(rank, null, null, null))
-                        gameIsOver = true;
-                }
-                else
-                {
-                    if (!nextPlayersHand[i].TryAddInfoAboutCard(null, null, rank, null))
-                        gameIsOver = true;
-                }
-            }
+            if (!nextPlayersHand.TryTellRank(rank, selectedCardsIndexes))
+                gameIsOver = true;
+        }
+
+        public void DropCard(int cardsIndex)
+        {
+            if (gameIsOver)
+                return;
+            playersHands[currentPlayer].DropCard(cardsIndex);
+            playersHands[currentPlayer].AddCard(new CardInfo(deck.Dequeue()));
+            if (deck.Count == 0)
+                gameIsOver = true;
         }
 
         public void PlayCard(int cardsIndex)
         {
             if (gameIsOver)
                 return;
-            CardInfo card = playersHands[currentPlayer][cardsIndex];
+            CardInfo card = playersHands[currentPlayer].GetCard(cardsIndex);
             if (cardsOnTable[card.RealCard.Color] + 1 != card.RealCard.Rank)
             {
                 gameIsOver = true;
@@ -254,16 +316,6 @@ namespace Probation
             if (allCardsOnTable)
                 gameIsOver = true;
         }
-
-        public void DropCard(int cardsIndex)
-        {
-            if (gameIsOver)
-                return;
-            playersHands[currentPlayer].RemoveAt(cardsIndex);
-            playersHands[currentPlayer].Add(new CardInfo(deck.Dequeue()));
-            if (deck.Count == 0)
-                gameIsOver = true;
-        }
     }
 
     public class GameCommandsParser
@@ -275,14 +327,14 @@ namespace Probation
         private readonly Regex DropCardRegex = new Regex(@"Drop card (\d)");
         private readonly Dictionary<Regex, Action<Match>> InputDataProсessing;
 
-        public GameCommandsParser(GameArbiter arbiter)
+        public GameCommandsParser(GameProcessor processor)
         {
             InputDataProсessing = new Dictionary<Regex, Action<Match>>();
-            InputDataProсessing[StartNewGameRegex] = match => arbiter.StartNewGame(match.Groups[1].Value.Split(' ').ToList());
-            InputDataProсessing[TellColorRegex] = match => arbiter.TellColor(match.Groups[1].Value, match.Groups[2].Value.Split(' ').Select(int.Parse).ToList());
-            InputDataProсessing[TellRankRegex] = match => arbiter.TellRank(int.Parse(match.Groups[1].Value), match.Groups[2].Value.Split(' ').Select(int.Parse).ToList());
-            InputDataProсessing[PlayCardRegex] = match => arbiter.PlayCard(int.Parse(match.Groups[1].Value));
-            InputDataProсessing[DropCardRegex] = match => arbiter.DropCard(int.Parse(match.Groups[1].Value));
+            InputDataProсessing[StartNewGameRegex] = match => processor.StartNewGame(match.Groups[1].Value.Split(' ').ToList());
+            InputDataProсessing[TellColorRegex] = match => processor.TellColor(match.Groups[1].Value, match.Groups[2].Value.Split(' ').Select(int.Parse).ToList());
+            InputDataProсessing[TellRankRegex] = match => processor.TellRank(int.Parse(match.Groups[1].Value), match.Groups[2].Value.Split(' ').Select(int.Parse).ToList());
+            InputDataProсessing[PlayCardRegex] = match => processor.PlayCard(int.Parse(match.Groups[1].Value));
+            InputDataProсessing[DropCardRegex] = match => processor.DropCard(int.Parse(match.Groups[1].Value));
         }
 
         public Action ParseCommand(string commandLine)
@@ -291,7 +343,8 @@ namespace Probation
             {
                 if (regex.IsMatch(commandLine))
                 {
-                    return () => InputDataProсessing[regex](regex.Match(commandLine));
+                    var currentRegex = regex;
+                    return () => InputDataProсessing[currentRegex](currentRegex.Match(commandLine));
                 }
             }
             throw new Exception("Error input line");
@@ -312,7 +365,7 @@ namespace Probation
 
         static void Main()
         {
-            var arbiter = new GameArbiter();
+            var arbiter = new GameProcessor();
             var commandsParser = new GameCommandsParser(arbiter);
             foreach (var gameResult in arbiter.RunGames(ReadAllLines().Select(commandsParser.ParseCommand)))
             {
